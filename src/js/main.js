@@ -1,150 +1,120 @@
-import * as PIXI from 'pixi.js'
-import * as particles from '@pixi/particle-emitter'
+import Phaser from 'phaser'
 
-const particleConfig =
-{
-  alpha: {
-		start: 1,
-		end: 1
-	},
-	scale: {
-		start: 0.1,
-		end: 0.01,
-		minimumScaleMultiplier: 1
-	},
-	color: {
-		start: "#ffffff",
-		end: "#ff0000"
-	},
-	speed: {
-		start: 200,
-		end: 50,
-		minimumSpeedMultiplier: 1
-	},
-	acceleration: {
-		x: 0,
-		y: 0
-	},
-	maxSpeed: 0,
-	startRotation: {
-		min: 0,
-		max: 360
-	},
-	noRotation: false,
-	rotationSpeed: {
-		min: 0,
-		max: 0
-	},
-	lifetime: {
-		min: 0.001,
-		max: 1
-	},
-	blendMode: 'screen',
-	frequency: 0.001,
-	emitterLifetime: -1,
-	maxParticles: 1000,
-	pos: {
-		x: 200,
-		y: 200
-	},
-	addAtBack: false,
-	spawnType: 'point',
-  behaviors: [
-      {
-          type: 'textureSingle',
-          config: {
-              texture: PIXI.Texture.from('assets/particle.png')
-          }
-      }
-  ],
+const randomNumberInInterval = (min, max) => {
+    return Math.floor(Math.random() * (max - min + 1) + min)
 }
 
-const loadAssets = (filenames) => {
-  const textures = {};
-  const sprites = {};
-  filenames.forEach(file => {
-    const assetName = `assets/${file}`;
-    const resourceName= file.substr(0, file.indexOf('.')); 
-    textures[resourceName] = PIXI.Texture.from(assetName);
-    sprites[resourceName] = new PIXI.Sprite(textures[resourceName]);
-  });
-
-  return sprites;
-}
-
-const loadParticles = (container) => {
-  debugger;
-  const emitter = ['test_particle', new particles.Emitter(container, particleConfig)];
-
-  return {
-    [emitter[0]]: emitter[1]
-  }
-}
-
-const draw = (app) => {
-  // load assets
-  const assets = ['fountain.png', 'rocket.png'];
-  const loadedAssets = loadAssets(assets);
-  const { fountain, rocket } = loadedAssets;
-
-  // create container for particles, add it to main stage and load particles into it
-  const container = new PIXI.ParticleContainer();
-  app.stage.addChild(container);
-  const loadedParticles = loadParticles(container);
-
-  fountain.anchor.set(0.5)
-  fountain.x = 200
-  fountain.y = 200
-
-  rocket.anchor.set(0.5)
-  rocket.x = 300
-  rocket.y = 300
-  
-  Object.keys(loadedAssets).forEach((key) => {
-    const asset = loadedAssets[key];
-    app.stage.addChild(asset)
-  });
-
-  return {
-    loadedAssets,
-    loadedParticles
-  }
-}
-
-const update = (loadedAssets, loadedParticles, delta, time) => {
-  const { fountain, rocket } = loadedAssets;
-  fountain.rotation -= 0.01 * delta;
-  rocket.rotation -= 0.01 * delta;
-
-  const { test_particle } = loadedParticles;
-  const now = Date.now()
-	test_particle.update((now - time.elapsed) * 0.001);
-  time.updateElapsedTime(now);
-}
-
-const run = (app) => {
-  let elapsed = Date.now();
-  const time = {
-    elapsed,
-    updateElapsedTime: function (updatedTime) {
-      this.elapsed = updatedTime;
+var config = {
+    type: Phaser.AUTO,
+    width: 800,
+    height: 600,
+    physics: {
+        default: 'arcade',
+        arcade: {
+            gravity: { y: 200 }
+        }
+    },
+    scene: {
+        preload: preload,
+        create: create,
+        update: update,
     }
-  }
-  // draw resources
-  const {loadedAssets, loadedParticles} = draw(app);
-  loadedParticles['test_particle'].emit = true;
-  // start the game loop
-  app.ticker.add((delta) => {
-    update(loadedAssets, loadedParticles, delta, time);
-  });
+};
+
+const game = new Phaser.Game(config);
+let particles, cursors, rocket, enemies, survivedTime, survivedTimeText, bestTimeText, startTime;
+let bestTime = 0;
+
+function preload ()
+{
+    this.load.image('fire', 'assets/Fire.png');
+    this.load.image('rocket', 'assets/rocket.png');
+    this.load.image('logo', 'assets/nasa.png');
+    this.load.image('enemy', 'assets/enemy.png');
 }
 
+function create ()
+{
+    survivedTime = 0;
+    const tick = setInterval(() => {
+        survivedTime += 1;
+        survivedTimeText.setText(`Current: ${survivedTime}s`);
+    }, 1000);
+    startTime = Date.now();
+    particles = this.add.particles('fire');
 
-const app = new PIXI.Application({
-  width: 860,
-  height: 640,
-  backgroundColor: 'black',
-  view: document.querySelector('#scene')
-});
+    const logo = this.add.sprite(400, 300, 'logo');
+    logo.setOrigin(0.5, 0.5);
+    logo.setScale(.2);
 
-run(app)
+    const combustion = particles.createEmitter({
+        alpha: { start: 1, end: 0 },
+        scale: { start: 0.5, end: 1 },
+        tint: { start: 0xff945e, end: 0xff945e },
+        speed: 20,
+        accelerationY: 400,
+        angle: { min: -85, max: -95 },
+        rotate: { min: -180, max: 180 },
+        lifespan: 3000,
+        blendMode: 'ADD',
+        frequency: 110,
+        x: 400,
+        y: 300,
+        collideBottom: true,
+    });
+
+    rocket = this.physics.add.image(250, 550, 'rocket');
+    rocket.setScale(.2);
+    rocket.setCollideWorldBounds(true);
+    
+    this.physics.world.enable([ rocket, logo ]);
+    combustion.startFollow(rocket);
+
+    cursors = this.input.keyboard.createCursorKeys();
+
+    enemies = this.physics.add.group();
+
+    this.physics.add.collider(rocket, enemies, () => {
+        this.scene.restart();
+        clearInterval(tick);
+        debugger;
+        if (survivedTime > bestTime) {
+            bestTime = survivedTime
+            bestTimeText.setText(`Previous record: ${bestTime}s`);
+        }
+    });
+
+    const style = { font: "bold 14px Arial", fill: "white" };
+    bestTimeText = this.add.text(0, 0, `Previous record: ${bestTime || 0}s`, style);
+    survivedTimeText = this.add.text(0, 10, `Current: ${survivedTime || 0}s`, style);
+}
+
+function update ()
+{
+    const isOdd = randomNumberInInterval(1, 14) % 5 == 0;
+
+    if (isOdd) {
+        const enemy = this.physics.add.image(randomNumberInInterval(50, 750), 0, 'enemy');
+        enemy.setScale(.05);
+        enemies.add(enemy);
+    }
+
+    if (cursors.left.isDown)
+    {
+        rocket.body.velocity.x -= 50 * 0.3;
+    }
+    else if (cursors.right.isDown)
+    {
+        rocket.body.velocity.x += 50 * 0.3;
+    }
+
+    if (cursors.up.isDown)
+    {
+        rocket.body.velocity.y -= 50 * 0.3;
+    }
+    else if (cursors.down.isDown)
+    {
+        rocket.body.velocity.y += 50 * 0.3;
+    }
+
+}
